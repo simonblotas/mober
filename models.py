@@ -2,8 +2,17 @@ import torch
 import torch.nn as nn
 from torch.distributions import Normal
 
+
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_layers, output_dim, dropouts=None, batch_norm_mlp = False, softmax_mlp=False):
+    def __init__(
+        self,
+        input_dim,
+        hidden_layers,
+        output_dim,
+        dropouts=None,
+        batch_norm_mlp=False,
+        softmax_mlp=False,
+    ):
         super().__init__()
         self.batch_norm_mlp = batch_norm_mlp
         self.softmax_mlp = softmax_mlp
@@ -34,9 +43,16 @@ class MLP(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, n_genes, enc_dim, hidden_layers=(256, 128), dropouts=(0.1, 0.1), batch_norm_enc = False):
+    def __init__(
+        self,
+        n_genes,
+        enc_dim,
+        hidden_layers=(256, 128),
+        dropouts=(0.1, 0.1),
+        batch_norm_enc=False,
+    ):
         super().__init__()
-        #self.activation = nn.SELU()
+        # self.activation = nn.SELU()
         self.batch_norm_enc = batch_norm_enc
         layers = []
         input_dim = n_genes
@@ -51,18 +67,18 @@ class Encoder(nn.Module):
         self.layers = nn.Sequential(*layers)
         self.linear_means = nn.Linear(hidden_layers[-1], enc_dim)
         self.linear_log_vars = nn.Linear(hidden_layers[-1], enc_dim)
-        
+
     def reparameterize(self, means, stdev):
-        
+
         return Normal(means, stdev).rsample()
-        
+
     def encode(self, x):
         # encode
         enc = self.layers(x)
-        
+
         means = self.linear_means(enc)
         log_vars = self.linear_log_vars(enc)
-        
+
         stdev = torch.exp(0.5 * log_vars) + 1e-4
         z = self.reparameterize(means, stdev)
 
@@ -70,9 +86,18 @@ class Encoder(nn.Module):
 
     def forward(self, x):
         return self.encode(x)
-    
+
+
 class Decoder(nn.Module):
-    def __init__(self, n_genes, enc_dim, n_batch, hidden_layers=(128, 256), dropouts=(0.1, 0.1), batch_norm_dec = False):
+    def __init__(
+        self,
+        n_genes,
+        enc_dim,
+        n_batch,
+        hidden_layers=(128, 256),
+        dropouts=(0.1, 0.1),
+        batch_norm_dec=False,
+    ):
         super().__init__()
         self.batch_norm_dec = batch_norm_dec
         self.activation = nn.SELU()
@@ -94,7 +119,7 @@ class Decoder(nn.Module):
 
         self.layers = nn.Sequential(*layers)
         self.out_fc = nn.Linear(hidden_layers[-1], n_genes)
-        
+
     def forward(self, z, batch):
         # batch input
         b = self.fcb(batch)
@@ -107,21 +132,37 @@ class Decoder(nn.Module):
         # decode layers
         dec = self.layers(n_z)
         dec = self.out_fc(dec)
-        
+
         return dec
 
 
 class BatchVAE(nn.Module):
-    def __init__(self, n_genes, enc_dim, n_batch, enc_hidden_layers, enc_dropouts, dec_hidden_layers, dec_dropouts,batch_norm_enc,batch_norm_dec):
+    def __init__(
+        self,
+        n_genes,
+        enc_dim,
+        n_batch,
+        enc_hidden_layers,
+        enc_dropouts,
+        dec_hidden_layers,
+        dec_dropouts,
+        batch_norm_enc,
+        batch_norm_dec,
+    ):
         super().__init__()
-        self.encoder = Encoder(n_genes, enc_dim, enc_hidden_layers, enc_dropouts, batch_norm_enc)
-        self.decoder = Decoder(n_genes, enc_dim, n_batch, dec_hidden_layers, dec_dropouts, batch_norm_dec)
-        
+        self.encoder = Encoder(
+            n_genes, enc_dim, enc_hidden_layers, enc_dropouts, batch_norm_enc
+        )
+        self.decoder = Decoder(
+            n_genes, enc_dim, n_batch, dec_hidden_layers, dec_dropouts, batch_norm_dec
+        )
+
     def forward(self, x, batch):
         means, stdev, enc = self.encoder(x)
         dec = self.decoder(enc, batch)
-        
+
         return dec, enc, means, stdev
+
 
 # Mober's paper version :
 '''
