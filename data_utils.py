@@ -6,38 +6,64 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data.sampler import Sampler
 from torch.utils.data import Dataset
+from typing import List, Union, Tuple, Iterator
 
-ach_data_path = "OmicsExpressionProteinCodingGenesTPMLogp1.csv"
 
+def access_ach_data(ach_data_path: str) -> pd.DataFrame:
+    """
+    Access the ACH data from the given path.
 
-def access_ach_data(ach_data_path):
-    ach_data = pd.read_csv("OmicsExpressionProteinCodingGenesTPMLogp1.csv")
+    Parameters:
+    ach_data_path (str): Path to the ACH data CSV file.
+
+    Returns:
+    pd.DataFrame: A DataFrame containing the ACH data.
+    """
+    ach_data = pd.read_csv(ach_data_path)
+
     # Apply the function to all column names and rename the columns
     ach_data.columns = [column.split(" ")[0] for column in ach_data.columns]
     ach_data.rename(columns={"Unnamed:": "Gene"}, inplace=True)
+
+    # Set the index to 'Gene'
     ach_data.set_index("Gene", inplace=True)
+
     return ach_data
 
 
-tcga_data_path = "TumorCompendium_v11_PolyA_hugo_log2tpm_58581genes_2020-04-09.tsv"
+def access_tcga_data(tcga_data_path: str) -> pd.DataFrame:
+    """
+    Access TCGA data from the specified path.
 
+    Parameters:
+    tcga_data_path (str): Path to the TCGA data TSV file.
 
-def access_tcga_data(tcga_data_path):
-    # Specify the path to your TSV file
-    tsv_file_path_tcga_data = (
-        "TumorCompendium_v11_PolyA_hugo_log2tpm_58581genes_2020-04-09.tsv"
-    )
-
+    Returns:
+    pd.DataFrame: Transposed DataFrame of the TCGA data with 'Gene' as index.
+    """
     # Read the TSV file into a pandas DataFrame
-    tcga_data = pd.read_csv(tsv_file_path_tcga_data, sep="\t")
+    tcga_data = pd.read_csv(tcga_data_path, sep="\t")
     tcga_data.set_index("Gene", inplace=True)
 
-    # Display the transposed DataFrame
+    # Transpose the DataFrame
     tcga_data_transposed = tcga_data.T
+
     return tcga_data_transposed
 
 
-def get_intersection(ach_data, tcga_data):
+def get_intersection(ach_data: pd.DataFrame, tcga_data: pd.DataFrame) -> tuple:
+    """
+    Get the intersection of columns between ACH data and TCGA data.
+
+    Parameters:
+    ach_data (pd.DataFrame): DataFrame containing ACH data.
+    tcga_data (pd.DataFrame): DataFrame containing TCGA data.
+
+    Returns:
+    tuple: A tuple containing two DataFrames:
+           1. DataFrame containing the intersection of columns from ACH data.
+           2. DataFrame containing the intersection of columns from TCGA data with reset index.
+    """
     # Get the intersection of column names
     intersection_columns = ach_data.columns.intersection(tcga_data.columns)
 
@@ -49,18 +75,28 @@ def get_intersection(ach_data, tcga_data):
     return ach_data_intersection, tcga_data_intersection
 
 
-tcga_projects_path = "TCGA_Projects.csv"
-ach_metadata_file_path = "Model.csv"
-
-
 def access_ach_data_with_abbreviation(
-    ach_data_intersection, tcga_projects_path, ach_metadata_file_path
-):
-    # read project list
+    ach_data_intersection: pd.DataFrame,
+    tcga_projects_path: str,
+    ach_metadata_file_path: str,
+) -> pd.DataFrame:
+    """
+    Access ACH data with abbreviation.
+
+    Parameters:
+    ach_data_intersection (pd.DataFrame): DataFrame containing intersection of ACH data.
+    tcga_projects_path (str): Path to the TCGA projects CSV file.
+    ach_metadata_file_path (str): Path to the ACH metadata CSV file.
+
+    Returns:
+    pd.DataFrame: DataFrame containing ACH data with abbreviation.
+    """
+    # Read project list
     tcga_projects = pd.read_csv(tcga_projects_path)
     tcga_projects["Cancer Type"] = tcga_projects["Cancer Type"].str.lower()
     tcga_projects["Cancer Type"] = tcga_projects["Cancer Type"].replace(" or ", ",")
 
+    # Read ACH metadata
     ach_metadata = pd.read_csv(ach_metadata_file_path)[
         ["ModelID", "OncotreePrimaryDisease", "OncotreeSubtype"]
     ]
@@ -68,6 +104,8 @@ def access_ach_data_with_abbreviation(
         "OncotreePrimaryDisease"
     ].str.lower()
     ach_metadata["OncotreeSubtype"] = ach_metadata["OncotreeSubtype"].str.lower()
+
+    # Map ACH metadata to TCGA projects
     ach_metadata["tcga_project"] = ach_metadata.apply(
         lambda x: tcga_mapper(
             x["OncotreePrimaryDisease"], x["OncotreeSubtype"], primary, sub_type
@@ -75,6 +113,7 @@ def access_ach_data_with_abbreviation(
         axis=1,
     )
 
+    # Merge ACH metadata with TCGA projects
     ach_metadata_final = pd.merge(
         ach_metadata,
         tcga_projects,
@@ -83,6 +122,7 @@ def access_ach_data_with_abbreviation(
         how="left",
     ).drop("Cancer Type", axis=1)
 
+    # Merge ACH metadata with ACH data
     ach_final = pd.merge(
         ach_metadata_final,
         ach_data_intersection,
@@ -92,25 +132,36 @@ def access_ach_data_with_abbreviation(
     )
     ach_final.insert(0, "Source", "ACH")
 
+    # Drop rows with NaN values
     ach_final = ach_final.dropna()
 
     return ach_final
 
 
-tcga_metadata_file_path = "clinical.tsv"
+def access_tcga_data_with_abbreviation(
+    tcga_data_intersection: pd.DataFrame, tcga_metadata_file_path: str
+) -> pd.DataFrame:
+    """
+    Access TCGA data with abbreviation.
 
+    Parameters:
+    tcga_data_intersection (pd.DataFrame): DataFrame containing intersection of TCGA data.
+    tcga_metadata_file_path (str): Path to the TCGA metadata TSV file.
 
-def access_tcga_data_with_abbreviation(tcga_data_intersection, tcga_metadata_file_path):
+    Returns:
+    pd.DataFrame: DataFrame containing TCGA data with abbreviation.
+    """
     # Read the TSV file into a pandas DataFrame
     tcga_metadata = pd.read_csv(tcga_metadata_file_path, sep="\t")
 
+    # Remove prefixes and suffixes from project IDs to get abbreviations
     tcga_metadata["project_id"] = [
         s.replace("TCGA-", "").replace("TARGET-", "")
         for s in tcga_metadata["project_id"]
     ]
     tcga_metadata.rename(columns={"project_id": "Abbreviation"}, inplace=True)
-    # Display the DataFrame
 
+    # Drop duplicate rows based on 'case_submitter_id'
     tcga_metadata = tcga_metadata.drop_duplicates(
         subset="case_submitter_id", keep="first"
     )
@@ -118,12 +169,12 @@ def access_tcga_data_with_abbreviation(tcga_data_intersection, tcga_metadata_fil
     # Make a copy of the DataFrame
     tcga_data_intersection_copy = tcga_data_intersection.copy()
 
-    # Modify the copy removing the specified suffixes
+    # Modify the copy removing specified suffixes
     tcga_data_intersection_copy["index"] = [
         re.sub(r"(_S\d+|-0\d+)$", "", s) for s in tcga_data_intersection_copy["index"]
     ]
 
-    # Merge DataFrames using 'case_submiter_id' and 'Gene'
+    # Merge DataFrames using 'case_submitter_id' and 'Gene'
     tcga_final = pd.merge(
         tcga_metadata,
         tcga_data_intersection_copy,
@@ -135,6 +186,7 @@ def access_tcga_data_with_abbreviation(tcga_data_intersection, tcga_metadata_fil
     # Insert 'Source' column
     tcga_final.insert(0, "Source", "TCGA")
 
+    # List of valid TCGA project abbreviations
     abbreviations = [
         "LAML",
         "ACC",
@@ -184,7 +236,9 @@ def access_tcga_data_with_abbreviation(tcga_data_intersection, tcga_metadata_fil
     return tcga_final
 
 
-def abbreviation_to_one_hot(abbreviation, abbreviation_to_index):
+def abbreviation_to_one_hot(
+    abbreviation: str, abbreviation_to_index: dict
+) -> torch.Tensor:
     """
     Map an abbreviation to its one-hot encoded tensor.
 
@@ -195,7 +249,6 @@ def abbreviation_to_one_hot(abbreviation, abbreviation_to_index):
     Returns:
     - one_hot_tensor (torch.Tensor): The one-hot encoded tensor for the given abbreviation.
     """
-
     if " or " in abbreviation:
         # Handle cases where an abbreviation may have two classes
         classes = abbreviation.split(" or ")
@@ -262,7 +315,9 @@ abbreviation_to_index = {
 index_to_abbreviation = {v: k for k, v in abbreviation_to_index.items()}
 
 
-def one_hot_to_abbreviation(one_hot_tensor, index_to_abbreviation):
+def one_hot_to_abbreviation(
+    one_hot_tensor: torch.Tensor, index_to_abbreviation: dict
+) -> Union[str, List[str]]:
     """
     Map a one-hot encoded tensor to its corresponding abbreviation.
 
@@ -277,6 +332,7 @@ def one_hot_to_abbreviation(one_hot_tensor, index_to_abbreviation):
     non_zero_indices = torch.nonzero(one_hot_tensor).squeeze()
 
     if non_zero_indices.numel() == 1:
+        # If there is only one non-zero element in the tensor
         index = non_zero_indices.item()
         if index in index_to_abbreviation:
             abbreviation = index_to_abbreviation[index]
@@ -286,6 +342,7 @@ def one_hot_to_abbreviation(one_hot_tensor, index_to_abbreviation):
                 f"Index '{index}' not found in the provided reverse mapping."
             )
     elif non_zero_indices.numel() == 2:
+        # If there are two non-zero elements in the tensor (representing a combination of classes)
         abbreviations = [index_to_abbreviation[idx.item()] for idx in non_zero_indices]
         abr = ""
         for i in range(len(abbreviations) - 1):
@@ -293,12 +350,13 @@ def one_hot_to_abbreviation(one_hot_tensor, index_to_abbreviation):
         abr += abbreviations[len(abbreviations) - 1]
         return abr
     else:
+        # If the tensor does not have exactly one or two non-zero elements
         raise ValueError(
             "Input tensor is not a valid one-hot encoded tensor (should have exactly one or two non-zero elements)."
         )
 
 
-def source_to_one_hot(source, source_to_index):
+def source_to_one_hot(source: str, source_to_index: dict) -> torch.Tensor:
     """
     Map a source to its one-hot encoded tensor.
 
@@ -320,7 +378,7 @@ def source_to_one_hot(source, source_to_index):
         raise ValueError(f"Source '{source}' not found in the provided mapping.")
 
 
-def one_hot_to_source(one_hot_tensor, index_to_source):
+def one_hot_to_source(one_hot_tensor: torch.Tensor, index_to_source: dict) -> str:
     """
     Map a one-hot encoded tensor to its corresponding source.
 
@@ -347,35 +405,67 @@ def one_hot_to_source(one_hot_tensor, index_to_source):
         )
 
 
-# Example usage
 source_to_index = {"ACH": 0, "TCGA": 1}
 index_to_source = {0: "ACH", 1: "TCGA"}
 
 
-def load_data(data, device):
+def load_data(
+    data: pd.DataFrame, device: torch.device
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Load data from a pandas DataFrame and convert it to PyTorch tensors.
+
+    Parameters:
+    - data: The DataFrame containing the data.
+    - device: The device to store the tensors on.
+
+    Returns:
+    - A tuple containing three tensors:
+      1. sources_one_hot_encoded: The one-hot encoded tensor for the data sources.
+      2. abbreviations_one_hot_encoded: The one-hot encoded tensor for the data abbreviations.
+      3. values: The tensor containing the numerical values.
+    """
+    # Extract numerical values from the DataFrame
     values = data.iloc[:, -18178:].values
+    # Convert numerical values to a PyTorch tensor of type float32
     values = torch.tensor(values).to(torch.float32)
+
+    # Extract metadata (abbreviations and sources) from the DataFrame
     metadata = data.iloc[:, :-18178]
     abbreviations = metadata["Abbreviation"]
+    # Convert abbreviations to one-hot encoded tensors using the provided function
     abbreviations_one_hot_encoded = [
         abbreviation_to_one_hot(abbreviation, abbreviation_to_index)
         for abbreviation in abbreviations
     ]
+    # Stack the one-hot encoded tensors along the specified dimension
     abbreviations_one_hot_encoded = torch.stack(abbreviations_one_hot_encoded, dim=0)
+
     sources = metadata["Source"]
+    # Convert sources to one-hot encoded tensors using the provided function
     sources_one_hot_encoded = [
         source_to_one_hot(source, source_to_index) for source in sources
     ]
+    # Stack the one-hot encoded tensors along the specified dimension
     sources_one_hot_encoded = torch.stack(sources_one_hot_encoded, dim=0)
 
+    # Move tensors to the specified device
     values.to(device)
     abbreviations_one_hot_encoded.to(device)
     sources_one_hot_encoded.to(device)
+
     return sources_one_hot_encoded, abbreviations_one_hot_encoded, values
 
 
 class CustomDataset(Dataset):
-    def __init__(self, dataframe, device):
+    def __init__(self, dataframe: pd.DataFrame, device: torch.device):
+        """
+        Initialize the CustomDataset.
+
+        Parameters:
+        - dataframe (pd.DataFrame): The DataFrame containing the data.
+        - device (torch.device): The device where tensors will be moved.
+        """
         self.data = dataframe
         self.device = device
         (
@@ -384,10 +474,26 @@ class CustomDataset(Dataset):
             self.values,
         ) = load_data(self.data, self.device)
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """
+        Get the length of the dataset.
+
+        Returns:
+        - int: The length of the dataset.
+        """
         return len(self.data)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Get an item from the dataset.
+
+        Parameters:
+        - idx (int): The index of the item to retrieve.
+
+        Returns:
+        - Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: A tuple containing tensors for sources,
+          abbreviations, and values corresponding to the specified index.
+        """
         return (
             self.sources_one_hot_encoded[idx],
             self.abbreviations_one_hot_encoded[idx],
@@ -396,12 +502,26 @@ class CustomDataset(Dataset):
 
 
 def access_data(
-    ach_data_path,
-    tcga_projects_path,
-    ach_metadata_file_path,
-    tcga_data_path,
-    tcga_metadata_file_path,
-):
+    ach_data_path: str,
+    tcga_projects_path: str,
+    ach_metadata_file_path: str,
+    tcga_data_path: str,
+    tcga_metadata_file_path: str,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Access and process the ACH and TCGA data.
+
+    Parameters:
+    - ach_data_path (str): The path to the ACH data.
+    - tcga_projects_path (str): The path to the TCGA projects.
+    - ach_metadata_file_path (str): The path to the ACH metadata file.
+    - tcga_data_path (str): The path to the TCGA data.
+    - tcga_metadata_file_path (str): The path to the TCGA metadata file.
+
+    Returns:
+    - Tuple[pd.DataFrame, pd.DataFrame]: A tuple containing DataFrames for the processed ACH
+      and TCGA data.
+    """
     ach_data = access_ach_data(ach_data_path)
     tcga_data = access_tcga_data(tcga_data_path)
     ach_data_intersection, tcga_data_intersection = get_intersection(
@@ -417,7 +537,18 @@ def access_data(
 
 
 class StratifiedSampler(Sampler):
-    def __init__(self, dataset, indices):
+    def __init__(self, dataset: Dataset, indices: List[int]):
+        """
+        Stratified sampling implementation for creating a balanced sampler.
+
+        Parameters:
+        - dataset (Dataset): The dataset to be sampled from.
+        - indices (List[int]): The indices to be sampled from.
+
+        Note:
+        The dataset is expected to return a tuple (label, _, _) from its __getitem__ method,
+        where label is the class label of the sample.
+        """
         self.dataset = dataset
         self.indices = indices
         self.num_samples = len(indices)
@@ -438,11 +569,23 @@ class StratifiedSampler(Sampler):
         ]
         self.weights = torch.DoubleTensor(weights)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[int]:
+        """
+        Returns an iterator over the indices.
+
+        Returns:
+        - Iterator[int]: An iterator over the indices.
+        """
         return (
             self.indices[i]
             for i in torch.multinomial(self.weights, self.num_samples, replacement=True)
         )
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """
+        Returns the number of samples in the sampler.
+
+        Returns:
+        - int: The number of samples in the sampler.
+        """
         return self.num_samples
