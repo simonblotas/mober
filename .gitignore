@@ -1,0 +1,8 @@
+wandb/
+example.db
+.csv
+.sh
+.tsv
+__pycache__/
+optuna_main.py
+optuna_def.py
