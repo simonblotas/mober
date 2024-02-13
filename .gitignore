@@ -4,7 +4,7 @@ Model.csv
 OmicsExpressionProteinCodingGenesTPMLogp1.csv
 TCGA_Projects.csv
 TumorCompendium_v11_PolyA_hugo_log2tpm_58581genes_2020-04-09.tsv
-.sh
+runner.sh
 clinical.tsv
 __pycache__/
 optuna_main.py
