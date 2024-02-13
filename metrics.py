@@ -7,22 +7,39 @@ import faiss
 def project_into_decoded_space(
     dataloader, model_BatchAE, device, space_to_project_into="TCGA"
 ):
+    """
+    Project the data from the latent space into the decoded space using the specified model.
+
+    Parameters:
+    - dataloader (DataLoader): The DataLoader containing the data batches.
+    - model_BatchAE: The trained BatchAE model.
+    - device: The device to use for computations.
+    - space_to_project_into (str): The space to project the data into, either "ACH" or "TCGA".
+
+    Returns:
+    - A tuple containing decoded data and true abbreviations for all, ACH, and TCGA spaces.
+    """
     all_decoded_data = []
     true_abbreviations = []
     ach_decoded_data = []
     ach_true_abbreviations = []
     tcga_decoded_data = []
     tcga_true_abbreviations = []
+
+    # Move model to the specified device and set it to evaluation mode
     model_BatchAE.to(device)
     model_BatchAE.eval()
+
     for batch in dataloader:
         genes, labels, abbreviations = (
             batch[2].to(device),
             batch[0].to(device),
             batch[1].to(device),
         )
+        # Encode the input data
         means, stdev, encoded_data = model_BatchAE.encoder(genes)
-        # Create tensors with ones and zeros
+
+        # Create tensors for masking
         n_rows = labels.shape[0]
         ones_column = torch.ones(n_rows, 1, device=device)
         zeros_column = torch.zeros(n_rows, 1, device=device)
@@ -31,20 +48,20 @@ def project_into_decoded_space(
         )
         mask_is_in_ach = torch.all(labels == torch.tensor([1.0, 0.0]).to(device), dim=1)
 
-        # Concatenate tensors along the second dimension (dim=1)
+        # Concatenate tensors along the second dimension (dim=1) based on the space to project into
         if space_to_project_into == "ACH":
             new_labels = torch.cat((ones_column, zeros_column), dim=1)
         elif space_to_project_into == "TCGA":
             new_labels = torch.cat((zeros_column, ones_column), dim=1)
 
-        # Ensure that new_labels is moved to the same device as encoded_data
+        # Move new_labels to the same device as encoded_data
         new_labels = new_labels.to(device)
 
+        # Decode the encoded data with the new labels
         decoded_data = model_BatchAE.decoder(encoded_data, new_labels)
-        # Append the decoded data to the list
-        all_decoded_data.append(
-            decoded_data.cpu().detach().numpy()
-        )  # Assuming you want to collect the results
+
+        # Append decoded data and true abbreviations based on the masks
+        all_decoded_data.append(decoded_data.cpu().detach().numpy())
         true_abbreviations.append(abbreviations.cpu().detach().numpy())
         ach_decoded_data.append(decoded_data[mask_is_in_ach].cpu().detach().numpy())
         ach_true_abbreviations.append(
@@ -55,7 +72,7 @@ def project_into_decoded_space(
             abbreviations[mask_is_in_tcga].cpu().detach().numpy()
         )
 
-    # Concatenate decoded data from all batches
+    # Concatenate decoded data and true abbreviations from all batches
     all_decoded_data = np.concatenate(all_decoded_data, axis=0)
     true_abbreviations = np.concatenate(true_abbreviations, axis=0)
     ach_decoded_data = np.concatenate(ach_decoded_data, axis=0)
@@ -74,8 +91,25 @@ def project_into_decoded_space(
 
 
 def metrics_on_dataloader(
-    true_space_labels, true_space_features, true_labels, model_predicted_features, k=25
-):
+    true_space_labels: np.ndarray,
+    true_space_features: np.ndarray,
+    true_labels: np.ndarray,
+    model_predicted_features: np.ndarray,
+    k: int = 25,
+) -> float:
+    """
+    Calculate metrics on the data loader.
+
+    Parameters:
+    - true_space_labels (np.ndarray): True space labels.
+    - true_space_features (np.ndarray): True space features.
+    - true_labels (np.ndarray): True labels.
+    - model_predicted_features (np.ndarray): Predicted features from the model.
+    - k (int, optional): Number of nearest neighbors to consider. Defaults to 25.
+
+    Returns:
+    - float: Accuracy metric.
+    """
 
     faiss.normalize_L2(true_space_features)
     index = faiss.IndexFlatIP(true_space_features.shape[1])
@@ -98,9 +132,6 @@ def metrics_on_dataloader(
 
     # Set the value at the max_index to 1 for each element
     new_array[np.arange(len(max_indices)), max_indices] = 1
-
-    # Convert one-hot representation to abbreviation
-    # predicted_abbreviations = one_hot_to_abbreviation(torch.tensor(new_array), index_to_abbreviation)
 
     # Count correct predictions
     count = np.sum(np.all((true_labels) == (new_array), axis=1)).item()

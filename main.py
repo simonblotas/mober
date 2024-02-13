@@ -24,7 +24,7 @@ parameters = {
     "val_ratio": 0.15,
     "test_ratio": 0.15,
     "Datasets": ["TCGA", "ACH"],
-    "selected_gpu": 3,  # Choose the GPU index you want to use
+    "selected_gpu": 0,  # Choose the GPU index you want to use
     "space_to_project_into": "TCGA",
     "K": 10,  # Number of Nearest Neighboors considered
     "enc_hidden_layers": (256, 128),
