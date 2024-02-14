@@ -25,9 +25,9 @@ parameters = {
     "train_ratio": 0.7,  # Ratio of data used for training
     "val_ratio": 0.15,  # Ratio of data used for validation
     "test_ratio": 0.15,  # Ratio of data used for testing
-    "Datasets": ["TCGA", "ACH"],  # List of datasets used
+    "Datasets": ["TCGA", "CCLE"],  # List of datasets used
     "selected_gpu": 0,  # Choose the GPU index you want to use
-    "space_to_project_into": "TCGA",  # Space to project the data into ('TCGA' or 'ACH')
+    "space_to_project_into": "TCGA",  # Space to project the data into ('TCGA' or 'CCLE')
     "K": 10,  # Number of nearest neighbors considered in metrics calculations
     "enc_hidden_layers": (256, 128),  # Sizes of hidden layers in the encoder
     "enc_dropouts": (0.1, 0.1),  # Dropout rates in the encoder
@@ -45,31 +45,31 @@ parameters = {
 
 
 # Paths to data files
-ach_data_path = "OmicsExpressionProteinCodingGenesTPMLogp1.csv"
+ccle_data_path = "OmicsExpressionProteinCodingGenesTPMLogp1.csv"
 tcga_data_path = "TumorCompendium_v11_PolyA_hugo_log2tpm_58581genes_2020-04-09.tsv"
 tcga_projects_path = "TCGA_Projects.csv"
-ach_metadata_file_path = "Model.csv"
+ccle_metadata_file_path = "Model.csv"
 tcga_metadata_file_path = "clinical.tsv"
 
 # Create a torch.device object
 device = torch.device(f"cuda:{parameters['selected_gpu']}")
 
 # Load data from files
-ach_final, tcga_final = access_data(
-    ach_data_path,
+ccle_final, tcga_final = access_data(
+    ccle_data_path,
     tcga_projects_path,
-    ach_metadata_file_path,
+    ccle_metadata_file_path,
     tcga_data_path,
     tcga_metadata_file_path,
 )
 
 
 # Create Pytorch datasets
-ach_dataset = CustomDataset(ach_final, device)
+ccle_dataset = CustomDataset(ccle_final, device)
 tcga_dataset = CustomDataset(tcga_final, device)
 
 # Create a ConcatDataset to concatenate the two datasets
-combined_dataset = ConcatDataset([ach_dataset, tcga_dataset])
+combined_dataset = ConcatDataset([ccle_dataset, tcga_dataset])
 
 # Get the a total of len(combined_dataset) samples
 total_samples = len(combined_dataset)
@@ -150,8 +150,8 @@ optimizer_src_adv = getattr(optim, optimizer_name_src_adv)(
     model_src_adv.parameters(), lr=parameters["adv_learning_rate"]
 )
 
-# Load ACH and TCGA data for metric compuation
-_, ach_abbreviations_labels, ach_features = load_data(ach_final, device)
+# Load ccle and TCGA data for metric compuation
+_, ccle_abbreviations_labels, ccle_features = load_data(ccle_final, device)
 _, tcga_abbreviations_labels, tcga_features = load_data(tcga_final, device)
 
 # Train the models
@@ -164,8 +164,8 @@ train_model(
     train_dataloader,
     val_dataloader,
     test_dataloader,
-    ach_features,
-    ach_abbreviations_labels,
+    ccle_features,
+    ccle_abbreviations_labels,
     tcga_features,
     tcga_abbreviations_labels,
     parameters,

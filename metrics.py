@@ -14,15 +14,15 @@ def project_into_decoded_space(
     - dataloader (DataLoader): The DataLoader containing the data batches.
     - model_BatchAE: The trained BatchAE model.
     - device: The device to use for computations.
-    - space_to_project_into (str): The space to project the data into, either "ACH" or "TCGA".
+    - space_to_project_into (str): The space to project the data into, either "CCLE" or "TCGA".
 
     Returns:
-    - A tuple containing decoded data and true abbreviations for all, ACH, and TCGA spaces.
+    - A tuple containing decoded data and true abbreviations for all, CCLE, and TCGA spaces.
     """
     all_decoded_data = []
     true_abbreviations = []
-    ach_decoded_data = []
-    ach_true_abbreviations = []
+    ccle_decoded_data = []
+    ccle_true_abbreviations = []
     tcga_decoded_data = []
     tcga_true_abbreviations = []
 
@@ -46,10 +46,10 @@ def project_into_decoded_space(
         mask_is_in_tcga = torch.all(
             labels == torch.tensor([0.0, 1.0]).to(device), dim=1
         )
-        mask_is_in_ach = torch.all(labels == torch.tensor([1.0, 0.0]).to(device), dim=1)
+        mask_is_in_ccle = torch.all(labels == torch.tensor([1.0, 0.0]).to(device), dim=1)
 
         # Concatenate tensors along the second dimension (dim=1) based on the space to project into
-        if space_to_project_into == "ACH":
+        if space_to_project_into == "CCLE":
             new_labels = torch.cat((ones_column, zeros_column), dim=1)
         elif space_to_project_into == "TCGA":
             new_labels = torch.cat((zeros_column, ones_column), dim=1)
@@ -63,9 +63,9 @@ def project_into_decoded_space(
         # Append decoded data and true abbreviations based on the masks
         all_decoded_data.append(decoded_data.cpu().detach().numpy())
         true_abbreviations.append(abbreviations.cpu().detach().numpy())
-        ach_decoded_data.append(decoded_data[mask_is_in_ach].cpu().detach().numpy())
-        ach_true_abbreviations.append(
-            abbreviations[mask_is_in_ach].cpu().detach().numpy()
+        ccle_decoded_data.append(decoded_data[mask_is_in_ccle].cpu().detach().numpy())
+        ccle_true_abbreviations.append(
+            abbreviations[mask_is_in_ccle].cpu().detach().numpy()
         )
         tcga_decoded_data.append(decoded_data[mask_is_in_tcga].cpu().detach().numpy())
         tcga_true_abbreviations.append(
@@ -75,16 +75,16 @@ def project_into_decoded_space(
     # Concatenate decoded data and true abbreviations from all batches
     all_decoded_data = np.concatenate(all_decoded_data, axis=0)
     true_abbreviations = np.concatenate(true_abbreviations, axis=0)
-    ach_decoded_data = np.concatenate(ach_decoded_data, axis=0)
-    ach_true_abbreviations = np.concatenate(ach_true_abbreviations, axis=0)
+    ccle_decoded_data = np.concatenate(ccle_decoded_data, axis=0)
+    ccle_true_abbreviations = np.concatenate(ccle_true_abbreviations, axis=0)
     tcga_decoded_data = np.concatenate(tcga_decoded_data, axis=0)
     tcga_true_abbreviations = np.concatenate(tcga_true_abbreviations, axis=0)
 
     return (
         all_decoded_data,
         true_abbreviations,
-        ach_decoded_data,
-        ach_true_abbreviations,
+        ccle_decoded_data,
+        ccle_true_abbreviations,
         tcga_decoded_data,
         tcga_true_abbreviations,
     )

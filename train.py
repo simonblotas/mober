@@ -70,8 +70,8 @@ def metrics_on_model(
     model_BatchAE: torch.nn.Module,
     tcga_abbreviations_labels: torch.Tensor,
     tcga_features_contiguous: torch.Tensor,
-    ach_abbreviations_labels: torch.Tensor,
-    ach_features_contiguous: torch.Tensor,
+    ccle_abbreviations_labels: torch.Tensor,
+    ccle_features_contiguous: torch.Tensor,
     dataloader: torch.utils.data.DataLoader,
     device: torch.device,
     parameters: dict,
@@ -83,22 +83,22 @@ def metrics_on_model(
     - model_BatchAE (torch.nn.Module): BatchAE model.
     - tcga_abbreviations_labels (torch.Tensor): Abbreviations labels for TCGA data.
     - tcga_features_contiguous (torch.Tensor): Contiguous features for TCGA data.
-    - ach_abbreviations_labels (torch.Tensor): Abbreviations labels for ACH data.
-    - ach_features_contiguous (torch.Tensor): Contiguous features for ACH data.
+    - ccle_abbreviations_labels (torch.Tensor): Abbreviations labels for CCLE data.
+    - ccle_features_contiguous (torch.Tensor): Contiguous features for CCLE data.
     - dataloader (torch.utils.data.DataLoader): DataLoader for evaluation data.
     - device (torch.device): Device to perform evaluation on.
     - parameters (dict): Dictionary containing evaluation parameters.
 
     Returns:
-    - Tuple[float, float, float]: Accuracy on all data, accuracy on ACH data, accuracy on TCGA data.
+    - Tuple[float, float, float]: Accuracy on all data, accuracy on CCLE data, accuracy on TCGA data.
     """
 
     # Metric on set :
     (
         all_decoded_data,
         true_abbreviations,
-        ach_decoded_data,
-        ach_true_abbreviations,
+        ccle_decoded_data,
+        ccle_true_abbreviations,
         tcga_decoded_data,
         tcga_true_abbreviations,
     ) = project_into_decoded_space(
@@ -113,11 +113,11 @@ def metrics_on_model(
             true_abbreviations,
             all_decoded_data,
         )
-        acc_ach = metrics_on_dataloader(
+        acc_ccle = metrics_on_dataloader(
             tcga_abbreviations_labels.numpy(),
             tcga_features_contiguous,
-            ach_true_abbreviations,
-            ach_decoded_data,
+            ccle_true_abbreviations,
+            ccle_decoded_data,
         )
         acc_tcga = metrics_on_dataloader(
             tcga_abbreviations_labels.numpy(),
@@ -125,19 +125,19 @@ def metrics_on_model(
             tcga_true_abbreviations,
             tcga_decoded_data,
         )
-    elif parameters["space_to_project_into"] == "ACH":
-        # Calculate accuracies for ACH data
+    elif parameters["space_to_project_into"] == "CCLE":
+        # Calculate accuracies for CCLE data
         acc_all_data = metrics_on_dataloader(
-            ach_abbreviations_labels.numpy(),
-            ach_features_contiguous,
+            ccle_abbreviations_labels.numpy(),
+            ccle_features_contiguous,
             true_abbreviations,
             all_decoded_data,
         )
-        acc_ach = metrics_on_dataloader(
+        acc_ccle = metrics_on_dataloader(
             tcga_abbreviations_labels.numpy(),
             tcga_features_contiguous,
-            ach_true_abbreviations,
-            ach_decoded_data,
+            ccle_true_abbreviations,
+            ccle_decoded_data,
         )
         acc_tcga = metrics_on_dataloader(
             tcga_abbreviations_labels.numpy(),
@@ -146,7 +146,7 @@ def metrics_on_model(
             tcga_decoded_data,
         )
 
-    return acc_all_data, acc_ach, acc_tcga
+    return acc_all_data, acc_ccle, acc_tcga
 
 
 def train_model(
@@ -158,8 +158,8 @@ def train_model(
     train_dataloader: torch.utils.data.DataLoader,
     val_dataloader: Optional[torch.utils.data.DataLoader],
     test_dataloader: Optional[torch.utils.data.DataLoader],
-    ach_features: np.ndarray,
-    ach_abbreviations_labels: torch.Tensor,
+    ccle_features: np.ndarray,
+    ccle_abbreviations_labels: torch.Tensor,
     tcga_features: np.ndarray,
     tcga_abbreviations_labels: torch.Tensor,
     parameters: dict,
@@ -176,18 +176,18 @@ def train_model(
     - train_dataloader (torch.utils.data.DataLoader): DataLoader for training data.
     - val_dataloader (Optional[torch.utils.data.DataLoader]): DataLoader for validation data.
     - test_dataloader (Optional[torch.utils.data.DataLoader]): DataLoader for test data.
-    - ach_features (np.ndarray): Features for ACH data.
-    - ach_abbreviations_labels (torch.Tensor): Abbreviations labels for ACH data.
+    - ccle_features (np.ndarray): Features for CCLE data.
+    - ccle_abbreviations_labels (torch.Tensor): Abbreviations labels for CCLE data.
     - tcga_features (np.ndarray): Features for TCGA data.
     - tcga_abbreviations_labels (torch.Tensor): Abbreviations labels for TCGA data.
     - parameters (dict): Dictionary containing training parameters.
 
     Returns:
-    - float: Accuracy on ACH data.
+    - float: Accuracy on CCLE data.
     """
 
     tcga_features_contiguous = np.ascontiguousarray(tcga_features)
-    ach_features_contiguous = np.ascontiguousarray(ach_features)
+    ccle_features_contiguous = np.ascontiguousarray(ccle_features)
 
     # Initialize WandB run
 
@@ -302,12 +302,12 @@ def train_model(
         )
 
         # Metric on training set :
-        train_acc_all_data, train_acc_ach, train_acc_tcga = metrics_on_model(
+        train_acc_all_data, train_acc_ccle, train_acc_tcga = metrics_on_model(
             model_BatchAE,
             tcga_abbreviations_labels,
             tcga_features_contiguous,
-            ach_abbreviations_labels,
-            ach_features_contiguous,
+            ccle_abbreviations_labels,
+            ccle_features_contiguous,
             train_dataloader,
             device,
             parameters,
@@ -322,7 +322,7 @@ def train_model(
         wandb.log(
             {
                 "Train_Accuracy_ach_on_"
-                + parameters["space_to_project_into"]: train_acc_ach
+                + parameters["space_to_project_into"]: train_acc_ccle
             },
             step=epoch,
         )
@@ -370,12 +370,12 @@ def train_model(
                     early_stop = True
                     print("Early stopping triggered.")
 
-            val_acc_all_data, val_acc_ach, val_acc_tcga = metrics_on_model(
+            val_acc_all_data, val_acc_ccle, val_acc_tcga = metrics_on_model(
                 model_BatchAE,
                 tcga_abbreviations_labels,
                 tcga_features_contiguous,
-                ach_abbreviations_labels,
-                ach_features_contiguous,
+                ccle_abbreviations_labels,
+                ccle_features_contiguous,
                 val_dataloader,
                 device,
                 parameters,
@@ -390,7 +390,7 @@ def train_model(
             wandb.log(
                 {
                     "Validation_Accuracy_ach_on_"
-                    + parameters["space_to_project_into"]: val_acc_ach
+                    + parameters["space_to_project_into"]: val_acc_ccle
                 },
                 step=epoch,
             )
@@ -424,12 +424,12 @@ def train_model(
                 step=epoch,
             )
 
-            test_acc_all_data, test_acc_ach, test_acc_tcga = metrics_on_model(
+            test_acc_all_data, test_acc_ccle, test_acc_tcga = metrics_on_model(
                 model_BatchAE,
                 tcga_abbreviations_labels,
                 tcga_features_contiguous,
-                ach_abbreviations_labels,
-                ach_features_contiguous,
+                ccle_abbreviations_labels,
+                ccle_features_contiguous,
                 test_dataloader,
                 device,
                 parameters,
@@ -444,7 +444,7 @@ def train_model(
             wandb.log(
                 {
                     "Test_Accuracy_ach_on_"
-                    + parameters["space_to_project_into"]: test_acc_ach
+                    + parameters["space_to_project_into"]: test_acc_ccle
                 },
                 step=epoch,
             )
@@ -460,4 +460,4 @@ def train_model(
     del model_BatchAE
     del model_src_adv
 
-    return test_acc_ach
+    return test_acc_ccle

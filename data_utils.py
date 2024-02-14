@@ -9,26 +9,26 @@ from torch.utils.data import Dataset
 from typing import List, Union, Tuple, Iterator
 
 
-def access_ach_data(ach_data_path: str) -> pd.DataFrame:
+def access_ccle_data(ccle_data_path: str) -> pd.DataFrame:
     """
-    Access the ACH data from the given path.
+    Access the ccle data from the given path.
 
     Parameters:
-    ach_data_path (str): Path to the ACH data CSV file.
+    ccle_data_path (str): Path to the ccle data CSV file.
 
     Returns:
-    pd.DataFrame: A DataFrame containing the ACH data.
+    pd.DataFrame: A DataFrame containing the ccle data.
     """
-    ach_data = pd.read_csv(ach_data_path)
+    ccle_data = pd.read_csv(ccle_data_path)
 
     # Apply the function to all column names and rename the columns
-    ach_data.columns = [column.split(" ")[0] for column in ach_data.columns]
-    ach_data.rename(columns={"Unnamed:": "Gene"}, inplace=True)
+    ccle_data.columns = [column.split(" ")[0] for column in ccle_data.columns]
+    ccle_data.rename(columns={"Unnamed:": "Gene"}, inplace=True)
 
     # Set the index to 'Gene'
-    ach_data.set_index("Gene", inplace=True)
+    ccle_data.set_index("Gene", inplace=True)
 
-    return ach_data
+    return ccle_data
 
 
 def access_tcga_data(tcga_data_path: str) -> pd.DataFrame:
@@ -51,91 +51,91 @@ def access_tcga_data(tcga_data_path: str) -> pd.DataFrame:
     return tcga_data_transposed
 
 
-def get_intersection(ach_data: pd.DataFrame, tcga_data: pd.DataFrame) -> tuple:
+def get_intersection(ccle_data: pd.DataFrame, tcga_data: pd.DataFrame) -> tuple:
     """
-    Get the intersection of columns between ACH data and TCGA data.
+    Get the intersection of columns between ccle data and TCGA data.
 
     Parameters:
-    ach_data (pd.DataFrame): DataFrame containing ACH data.
+    ccle_data (pd.DataFrame): DataFrame containing ccle data.
     tcga_data (pd.DataFrame): DataFrame containing TCGA data.
 
     Returns:
     tuple: A tuple containing two DataFrames:
-           1. DataFrame containing the intersection of columns from ACH data.
+           1. DataFrame containing the intersection of columns from ccle data.
            2. DataFrame containing the intersection of columns from TCGA data with reset index.
     """
     # Get the intersection of column names
-    intersection_columns = ach_data.columns.intersection(tcga_data.columns)
+    intersection_columns = ccle_data.columns.intersection(tcga_data.columns)
 
     # Create new DataFrames with only the intersection of columns
-    ach_data_intersection = ach_data[intersection_columns]
+    ccle_data_intersection = ccle_data[intersection_columns]
     tcga_data_intersection = tcga_data[intersection_columns]
     tcga_data_intersection.reset_index(inplace=True)
 
-    return ach_data_intersection, tcga_data_intersection
+    return ccle_data_intersection, tcga_data_intersection
 
 
-def access_ach_data_with_abbreviation(
-    ach_data_intersection: pd.DataFrame,
+def access_ccle_data_with_abbreviation(
+    ccle_data_intersection: pd.DataFrame,
     tcga_projects_path: str,
-    ach_metadata_file_path: str,
+    ccle_metadata_file_path: str,
 ) -> pd.DataFrame:
     """
-    Access ACH data with abbreviation.
+    Access ccle data with abbreviation.
 
     Parameters:
-    ach_data_intersection (pd.DataFrame): DataFrame containing intersection of ACH data.
+    ccle_data_intersection (pd.DataFrame): DataFrame containing intersection of ccle data.
     tcga_projects_path (str): Path to the TCGA projects CSV file.
-    ach_metadata_file_path (str): Path to the ACH metadata CSV file.
+    ccle_metadata_file_path (str): Path to the ccle metadata CSV file.
 
     Returns:
-    pd.DataFrame: DataFrame containing ACH data with abbreviation.
+    pd.DataFrame: DataFrame containing ccle data with abbreviation.
     """
     # Read project list
     tcga_projects = pd.read_csv(tcga_projects_path)
     tcga_projects["Cancer Type"] = tcga_projects["Cancer Type"].str.lower()
     tcga_projects["Cancer Type"] = tcga_projects["Cancer Type"].replace(" or ", ",")
 
-    # Read ACH metadata
-    ach_metadata = pd.read_csv(ach_metadata_file_path)[
+    # Read ccle metadata
+    ccle_metadata = pd.read_csv(ccle_metadata_file_path)[
         ["ModelID", "OncotreePrimaryDisease", "OncotreeSubtype"]
     ]
-    ach_metadata["OncotreePrimaryDisease"] = ach_metadata[
+    ccle_metadata["OncotreePrimaryDisease"] = ccle_metadata[
         "OncotreePrimaryDisease"
     ].str.lower()
-    ach_metadata["OncotreeSubtype"] = ach_metadata["OncotreeSubtype"].str.lower()
+    ccle_metadata["OncotreeSubtype"] = ccle_metadata["OncotreeSubtype"].str.lower()
 
-    # Map ACH metadata to TCGA projects
-    ach_metadata["tcga_project"] = ach_metadata.apply(
+    # Map ccle metadata to TCGA projects
+    ccle_metadata["tcga_project"] = ccle_metadata.apply(
         lambda x: tcga_mapper(
             x["OncotreePrimaryDisease"], x["OncotreeSubtype"], primary, sub_type
         ),
         axis=1,
     )
 
-    # Merge ACH metadata with TCGA projects
-    ach_metadata_final = pd.merge(
-        ach_metadata,
+    # Merge ccle metadata with TCGA projects
+    ccle_metadata_final = pd.merge(
+        ccle_metadata,
         tcga_projects,
         left_on="tcga_project",
         right_on="Cancer Type",
         how="left",
     ).drop("Cancer Type", axis=1)
 
-    # Merge ACH metadata with ACH data
-    ach_final = pd.merge(
-        ach_metadata_final,
-        ach_data_intersection,
+    # Merge ccle metadata with ccle data
+    ccle_final = pd.merge(
+        ccle_metadata_final,
+        ccle_data_intersection,
         left_on="ModelID",
         right_on="Gene",
         how="inner",
     )
-    ach_final.insert(0, "Source", "ACH")
+    ccle_final.insert(0, "Source", "ccle")
 
     # Drop rows with NaN values
-    ach_final = ach_final.dropna()
+    ccle_final = ccle_final.dropna()
 
-    return ach_final
+    return ccle_final
 
 
 def access_tcga_data_with_abbreviation(
@@ -361,7 +361,7 @@ def source_to_one_hot(source: str, source_to_index: dict) -> torch.Tensor:
     Map a source to its one-hot encoded tensor.
 
     Parameters:
-    - source (str): The source to be encoded ('ACH' or 'TCGA').
+    - source (str): The source to be encoded ('ccle' or 'TCGA').
     - source_to_index (dict): A dictionary mapping sources to their corresponding indices.
 
     Returns:
@@ -405,8 +405,8 @@ def one_hot_to_source(one_hot_tensor: torch.Tensor, index_to_source: dict) -> st
         )
 
 
-source_to_index = {"ACH": 0, "TCGA": 1}
-index_to_source = {0: "ACH", 1: "TCGA"}
+source_to_index = {"ccle": 0, "TCGA": 1}
+index_to_source = {0: "ccle", 1: "TCGA"}
 
 
 def load_data(
@@ -502,38 +502,38 @@ class CustomDataset(Dataset):
 
 
 def access_data(
-    ach_data_path: str,
+    ccle_data_path: str,
     tcga_projects_path: str,
-    ach_metadata_file_path: str,
+    ccle_metadata_file_path: str,
     tcga_data_path: str,
     tcga_metadata_file_path: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Access and process the ACH and TCGA data.
+    Access and process the ccle and TCGA data.
 
     Parameters:
-    - ach_data_path (str): The path to the ACH data.
+    - ccle_data_path (str): The path to the ccle data.
     - tcga_projects_path (str): The path to the TCGA projects.
-    - ach_metadata_file_path (str): The path to the ACH metadata file.
+    - ccle_metadata_file_path (str): The path to the ccle metadata file.
     - tcga_data_path (str): The path to the TCGA data.
     - tcga_metadata_file_path (str): The path to the TCGA metadata file.
 
     Returns:
-    - Tuple[pd.DataFrame, pd.DataFrame]: A tuple containing DataFrames for the processed ACH
+    - Tuple[pd.DataFrame, pd.DataFrame]: A tuple containing DataFrames for the processed ccle
       and TCGA data.
     """
-    ach_data = access_ach_data(ach_data_path)
+    ccle_data = access_ccle_data(ccle_data_path)
     tcga_data = access_tcga_data(tcga_data_path)
-    ach_data_intersection, tcga_data_intersection = get_intersection(
-        ach_data, tcga_data
+    ccle_data_intersection, tcga_data_intersection = get_intersection(
+        ccle_data, tcga_data
     )
-    ach_final = access_ach_data_with_abbreviation(
-        ach_data_intersection, tcga_projects_path, ach_metadata_file_path
+    ccle_final = access_ccle_data_with_abbreviation(
+        ccle_data_intersection, tcga_projects_path, ccle_metadata_file_path
     )
     tcga_final = access_tcga_data_with_abbreviation(
         tcga_data_intersection, tcga_metadata_file_path
     )
-    return ach_final, tcga_final
+    return ccle_final, tcga_final
 
 
 class StratifiedSampler(Sampler):
@@ -553,7 +553,7 @@ class StratifiedSampler(Sampler):
         self.indices = indices
         self.num_samples = len(indices)
 
-        # Count the frequency of each class in the specified indices
+        # Count the frequency of eccle class in the specified indices
         label_to_count = {}
         for index in self.indices:
             label, _, _ = self.dataset[index]
@@ -562,7 +562,7 @@ class StratifiedSampler(Sampler):
                 label_to_count[label] += 1
             else:
                 label_to_count[label] = 1
-        # Weight for each sample
+        # Weight for eccle sample
         weights = [
             1.0 / label_to_count[str(self.dataset[index][0].tolist())]
             for index in self.indices
