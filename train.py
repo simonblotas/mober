@@ -4,29 +4,61 @@ import wandb
 from datetime import datetime
 from metrics import project_into_decoded_space, metrics_on_dataloader
 import numpy as np
+from typing import Tuple, Optional
 
 
-def evaluate_model(model_BatchAE, model_src_adv, dataloader, device, parameters):
+def evaluate_model(
+    model_BatchAE: torch.nn.Module,
+    model_src_adv: torch.nn.Module,
+    dataloader: torch.utils.data.DataLoader,
+    device: torch.device,
+    parameters: dict,
+) -> Tuple[float, float, float]:
+    """
+    Evaluate the model.
+
+    Parameters:
+    - model_BatchAE (torch.nn.Module): BatchAE model.
+    - model_src_adv (torch.nn.Module): Source adversarial model.
+    - dataloader (torch.utils.data.DataLoader): DataLoader for evaluation data.
+    - device (torch.device): Device to perform evaluation on.
+    - parameters (dict): Dictionary containing evaluation parameters.
+
+    Returns:
+    - Tuple[float, float, float]: Tuple containing epoch AE loss, epoch source adversarial loss, and total epoch loss.
+    """
+
+    # Set models to evaluation mode
     model_BatchAE.eval()
     model_src_adv.eval()
+
+    # Initialize variables to store loss values
     epoch_ae_loss_val = 0.0
     epoch_src_adv_loss_val = 0.0
     epoch_tot_loss_val = 0.0
 
+    # Disable gradient computation during evaluation
     with torch.no_grad():
+        # Iterate over batches in the dataloader
         for batch in dataloader:
             genes, labels = batch[2].to(device), batch[0].to(device)
+            # Forward pass through BatchAE model
             dec, enc, means, stdev = model_BatchAE(genes, labels)
+            # Compute VAE loss
             v_loss = loss_function_vae(
                 dec, genes, means, stdev, kl_weight=parameters["kl_weight"]
             )
 
+            # Forward pass through source adversarial model
             src_pred = model_src_adv(enc)
+            # Compute source adversarial loss
             loss_src_adv = loss_function_classification(
                 src_pred, labels, parameters["src_weights_src_adv"].to(device)
             )
+            # Compute total loss
             loss_ae = v_loss - parameters["src_adv_weight"] * loss_src_adv
 
+            # Accumulate loss values
             epoch_ae_loss_val += v_loss.detach().item()
             epoch_src_adv_loss_val += loss_src_adv.detach().item()
             epoch_tot_loss_val += loss_ae.detach().item()
@@ -35,15 +67,32 @@ def evaluate_model(model_BatchAE, model_src_adv, dataloader, device, parameters)
 
 
 def metrics_on_model(
-    model_BatchAE,
-    tcga_abbreviations_labels,
-    tcga_features_contiguous,
-    ach_abbreviations_labels,
-    ach_features_contiguous,
-    dataloader,
-    device,
-    parameters,
-):
+    model_BatchAE: torch.nn.Module,
+    tcga_abbreviations_labels: torch.Tensor,
+    tcga_features_contiguous: torch.Tensor,
+    ach_abbreviations_labels: torch.Tensor,
+    ach_features_contiguous: torch.Tensor,
+    dataloader: torch.utils.data.DataLoader,
+    device: torch.device,
+    parameters: dict,
+) -> Tuple[float, float, float]:
+    """
+    Compute metrics on the model.
+
+    Parameters:
+    - model_BatchAE (torch.nn.Module): BatchAE model.
+    - tcga_abbreviations_labels (torch.Tensor): Abbreviations labels for TCGA data.
+    - tcga_features_contiguous (torch.Tensor): Contiguous features for TCGA data.
+    - ach_abbreviations_labels (torch.Tensor): Abbreviations labels for ACH data.
+    - ach_features_contiguous (torch.Tensor): Contiguous features for ACH data.
+    - dataloader (torch.utils.data.DataLoader): DataLoader for evaluation data.
+    - device (torch.device): Device to perform evaluation on.
+    - parameters (dict): Dictionary containing evaluation parameters.
+
+    Returns:
+    - Tuple[float, float, float]: Accuracy on all data, accuracy on ACH data, accuracy on TCGA data.
+    """
+
     # Metric on set :
     (
         all_decoded_data,
@@ -55,7 +104,9 @@ def metrics_on_model(
     ) = project_into_decoded_space(
         dataloader, model_BatchAE, device, parameters["space_to_project_into"]
     )
+
     if parameters["space_to_project_into"] == "TCGA":
+        # Calculate accuracies for TCGA data
         acc_all_data = metrics_on_dataloader(
             tcga_abbreviations_labels.numpy(),
             tcga_features_contiguous,
@@ -75,6 +126,7 @@ def metrics_on_model(
             tcga_decoded_data,
         )
     elif parameters["space_to_project_into"] == "ACH":
+        # Calculate accuracies for ACH data
         acc_all_data = metrics_on_dataloader(
             ach_abbreviations_labels.numpy(),
             ach_features_contiguous,
@@ -93,24 +145,46 @@ def metrics_on_model(
             tcga_true_abbreviations,
             tcga_decoded_data,
         )
+
     return acc_all_data, acc_ach, acc_tcga
 
 
 def train_model(
-    model_BatchAE,
-    optimizer_BatchAE,
-    model_src_adv,
-    optimizer_src_adv,
-    device,
-    train_dataloader,
-    val_dataloader,
-    test_dataloader,
-    ach_features,
-    ach_abbreviations_labels,
-    tcga_features,
-    tcga_abbreviations_labels,
-    parameters,
-):
+    model_BatchAE: torch.nn.Module,
+    optimizer_BatchAE: torch.optim.Optimizer,
+    model_src_adv: torch.nn.Module,
+    optimizer_src_adv: torch.optim.Optimizer,
+    device: torch.device,
+    train_dataloader: torch.utils.data.DataLoader,
+    val_dataloader: Optional[torch.utils.data.DataLoader],
+    test_dataloader: Optional[torch.utils.data.DataLoader],
+    ach_features: np.ndarray,
+    ach_abbreviations_labels: torch.Tensor,
+    tcga_features: np.ndarray,
+    tcga_abbreviations_labels: torch.Tensor,
+    parameters: dict,
+) -> float:
+    """
+    Train the model and evaluate its performance.
+
+    Parameters:
+    - model_BatchAE (torch.nn.Module): BatchAE model.
+    - optimizer_BatchAE (torch.optim.Optimizer): Optimizer for BatchAE.
+    - model_src_adv (torch.nn.Module): Source adversary model.
+    - optimizer_src_adv (torch.optim.Optimizer): Optimizer for source adversary.
+    - device (torch.device): Device to perform training and evaluation on.
+    - train_dataloader (torch.utils.data.DataLoader): DataLoader for training data.
+    - val_dataloader (Optional[torch.utils.data.DataLoader]): DataLoader for validation data.
+    - test_dataloader (Optional[torch.utils.data.DataLoader]): DataLoader for test data.
+    - ach_features (np.ndarray): Features for ACH data.
+    - ach_abbreviations_labels (torch.Tensor): Abbreviations labels for ACH data.
+    - tcga_features (np.ndarray): Features for TCGA data.
+    - tcga_abbreviations_labels (torch.Tensor): Abbreviations labels for TCGA data.
+    - parameters (dict): Dictionary containing training parameters.
+
+    Returns:
+    - float: Accuracy on ACH data.
+    """
 
     tcga_features_contiguous = np.ascontiguousarray(tcga_features)
     ach_features_contiguous = np.ascontiguousarray(ach_features)
@@ -189,7 +263,6 @@ def train_model(
             loss_src_adv = loss_function_classification(
                 src_pred, labels, parameters["src_weights_src_adv"].to(device)
             )
-            # print('adv_loss_1',loss_src_adv)
             loss_src_adv.backward(retain_graph=True)
             epoch_src_adv_loss += loss_src_adv.detach().item()
             optimizer_src_adv.step()
@@ -198,8 +271,7 @@ def train_model(
             loss_src_adv = loss_function_classification(
                 src_pred, labels, parameters["src_weights_src_adv"].to(device)
             )
-            # print('adv_loss_2',loss_src_adv)
-            # print('loss_vae', v_loss)
+
             # Update ae
             model_BatchAE.zero_grad()
             loss_ae = v_loss - parameters["src_adv_weight"] * loss_src_adv
@@ -214,6 +286,7 @@ def train_model(
         avg_train_tot_loss = epoch_tot_loss / len(train_dataloader.dataset)
 
         # Log metrics to WandB
+
         wandb.log(
             {
                 "Train/AE_Loss": avg_train_ae_loss,
