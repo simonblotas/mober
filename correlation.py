@@ -110,7 +110,7 @@ def plot_distances(distances_tcga,distances_celligner,distances_mober,distances_
         
         # Add title and labels
         plt.title(f'Distances Density for Subtype {subtype}')
-        plt.xlabel('Correlation Coefficient')
+        plt.xlabel('L2 distances')
         plt.ylabel('Density')
         
         # Show legend
