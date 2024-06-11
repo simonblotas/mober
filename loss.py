@@ -3,47 +3,59 @@ from torch.distributions import kl_divergence, Normal
 from torch.nn import NLLLoss
 from torch.nn import CrossEntropyLoss
 import torch.nn.functional as F
+from torch.autograd import Variable
+
+
+def compute_kernel(x, y):
+    x_size = x.size(0)
+    y_size = y.size(0)
+    dim = x.size(1)
+    x = x.unsqueeze(1)  # (x_size, 1, dim)
+    y = y.unsqueeze(0)  # (1, y_size, dim)
+    tiled_x = x.expand(x_size, y_size, dim)
+    tiled_y = y.expand(x_size, y_size, dim)
+    kernel_input = (tiled_x - tiled_y).pow(2).mean(2) / float(dim)
+    return torch.exp(-kernel_input)  # (x_size, y_size)
+
+
+def compute_mmd(x, y):
+    x_tensor = (
+        x if isinstance(x, torch.Tensor) else x[0]
+    )  # Extract tensor if x is a tuple
+    y_tensor = (
+        y if isinstance(y, torch.Tensor) else y[0]
+    )  # Extract tensor if y is a tuple
+    x_kernel = compute_kernel(x_tensor, x_tensor)
+    y_kernel = compute_kernel(y_tensor, y_tensor)
+    xy_kernel = compute_kernel(x_tensor, y_tensor)
+    mmd = x_kernel.mean() + y_kernel.mean() - 2 * xy_kernel.mean()
+    return mmd
 
 
 def loss_function_vae(
-    dec: torch.Tensor,
-    x: torch.Tensor,
-    mu: torch.Tensor,
-    stdev: torch.Tensor,
-    kl_weight: float = 1.0,
-) -> torch.Tensor:
-    """
-    Calculate the loss function for a Variational Autoencoder (VAE).
+    enc, dec, x, mu, stdev, device, discrepancy_weight=1e-5, discrepancy="KLD"
+):
+    # sum over genes, mean over samples, like trvae
 
-    Args:
-        dec (torch.Tensor): Decoded output tensor.
-        x (torch.Tensor): Input tensor.
-        mu (torch.Tensor): Mean values from the encoder.
-        stdev (torch.Tensor): Standard deviation values from the encoder.
-        kl_weight (float, optional): Weight for the KL divergence term. Defaults to 1.0.
-
-    Returns:
-        torch.Tensor: Total loss value.
-
-    """
-    # Define the prior distribution
     mean = torch.zeros_like(
         mu
     )  # tensor with the same shape as mu but filled with zeros
     scale = torch.ones_like(
         stdev
-    )  # tensor with the same shape as stdev but filled with ones
+    )  #  tensor with the same shape as stdev but filled with ones
+    if discrepancy == "KLD":
+        discrepancy_loss = kl_divergence(Normal(mu, stdev), Normal(mean, scale)).mean(
+            dim=1
+        )  # Regularisation term
 
-    # Calculate KL divergence
-    KLD = kl_divergence(Normal(mu, stdev), Normal(mean, scale)).mean(dim=1)
+    elif discrepancy == "MMD":
+        true_samples = Variable(
+            torch.randn(enc.shape[0], enc.shape[1]), requires_grad=False
+        )
+        discrepancy_loss = compute_mmd(true_samples.to(device), enc.to(device))
 
-    # Reconstruction loss
     reconst_loss = F.mse_loss(dec, x, reduction="none").mean(dim=1)
-
-    # Total loss
-    total_loss = (reconst_loss + kl_weight * KLD).sum(dim=0)
-
-    return total_loss
+    return (reconst_loss + discrepancy_weight * discrepancy_loss).sum(dim=0)
 
 
 '''
