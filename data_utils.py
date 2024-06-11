@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch.utils.data.sampler import Sampler
 from torch.utils.data import Dataset
 from typing import List, Union, Tuple, Iterator
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
 def access_ccle_data(ccle_data_path: str) -> pd.DataFrame:
@@ -130,7 +131,7 @@ def access_ccle_data_with_abbreviation(
         right_on="Gene",
         how="inner",
     )
-    ccle_final.insert(0, "Source", "ccle")
+    ccle_final.insert(0, "Source", "CCLE")
 
     # Drop rows with NaN values
     ccle_final = ccle_final.dropna()
@@ -170,9 +171,20 @@ def access_tcga_data_with_abbreviation(
     tcga_data_intersection_copy = tcga_data_intersection.copy()
 
     # Modify the copy removing specified suffixes
-    tcga_data_intersection_copy["index"] = [
-        re.sub(r"(_S\d+|-0\d+)$", "", s) for s in tcga_data_intersection_copy["index"]
-    ]
+    def clean_element(s):
+        if s.startswith('TCGA'):
+            # Remove the specified suffixes only for elements starting with TCGA
+            s = re.sub(r'(_S\d+|-0\d+)$', '', s)
+
+        elif s.startswith('TARGET'):
+            # Remove the specified suffixes only for elements starting with TCGA
+            
+            split = s.split('-')
+            s = split[0] + '-' + split[1]+'-'+ split[2]
+
+        return s
+
+    tcga_data_intersection_copy["index"] = [clean_element(s) for s in tcga_data_intersection_copy["index"]]
 
     # Merge DataFrames using 'case_submitter_id' and 'Gene'
     tcga_final = pd.merge(
@@ -228,11 +240,10 @@ def access_tcga_data_with_abbreviation(
     ]
 
     # Create a boolean mask to filter rows based on whether the abbreviation is valid
-    mask = tcga_final["Abbreviation"].isin(abbreviations)
+    #mask = tcga_final["Abbreviation"].isin(abbreviations)
 
     # Apply the mask to filter the DataFrame
-    tcga_final = tcga_final[mask]
-
+    #tcga_final = tcga_final[mask]
     return tcga_final
 
 
@@ -266,10 +277,9 @@ def abbreviation_to_one_hot(
         ).squeeze()
         return one_hot_tensor
     else:
-        raise ValueError(
-            f"Abbreviation '{abbreviation}' not found in the provided mapping."
-        )
-
+        num_classes = len(abbreviation_to_index)
+        one_hot_tensor = torch.zeros(num_classes)
+        return one_hot_tensor
 
 abbreviation_to_index = {
     "LAML": 0,
@@ -405,60 +415,64 @@ def one_hot_to_source(one_hot_tensor: torch.Tensor, index_to_source: dict) -> st
         )
 
 
-source_to_index = {"ccle": 0, "TCGA": 1}
-index_to_source = {0: "ccle", 1: "TCGA"}
+source_to_index = {"CCLE": 0, "TCGA": 1}
+index_to_source = {0: "CCLE", 1: "TCGA"}
 
 
-def load_data(
-    data: pd.DataFrame, device: torch.device
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Load data from a pandas DataFrame and convert it to PyTorch tensors.
+def load_data(data, device, n_genes, standardize=True):
+    values = data.iloc[:, -n_genes:].values
+    values_tensor = torch.tensor(values).to(torch.float32)
 
-    Parameters:
-    - data: The DataFrame containing the data.
-    - device: The device to store the tensors on.
+    if standardize:
+        # Standardize the data
+        scaler = StandardScaler()
+        standardized_values = scaler.fit_transform(values)
+        # Convert to PyTorch tensor
+        values_tensor = torch.tensor(standardized_values, dtype=torch.float32)
 
-    Returns:
-    - A tuple containing three tensors:
-      1. sources_one_hot_encoded: The one-hot encoded tensor for the data sources.
-      2. abbreviations_one_hot_encoded: The one-hot encoded tensor for the data abbreviations.
-      3. values: The tensor containing the numerical values.
-    """
-    # Extract numerical values from the DataFrame
-    values = data.iloc[:, -18178:].values
-    # Convert numerical values to a PyTorch tensor of type float32
-    values = torch.tensor(values).to(torch.float32)
+    # Normalize the data
+    # min_max_scaler = MinMaxScaler()
+    # normalized_values = min_max_scaler.fit_transform(standardized_values)
 
-    # Extract metadata (abbreviations and sources) from the DataFrame
-    metadata = data.iloc[:, :-18178]
+    metadata = data.iloc[:, :-n_genes]
     abbreviations = metadata["Abbreviation"]
-    # Convert abbreviations to one-hot encoded tensors using the provided function
     abbreviations_one_hot_encoded = [
         abbreviation_to_one_hot(abbreviation, abbreviation_to_index)
         for abbreviation in abbreviations
     ]
-    # Stack the one-hot encoded tensors along the specified dimension
     abbreviations_one_hot_encoded = torch.stack(abbreviations_one_hot_encoded, dim=0)
-
     sources = metadata["Source"]
-    # Convert sources to one-hot encoded tensors using the provided function
     sources_one_hot_encoded = [
         source_to_one_hot(source, source_to_index) for source in sources
     ]
-    # Stack the one-hot encoded tensors along the specified dimension
     sources_one_hot_encoded = torch.stack(sources_one_hot_encoded, dim=0)
 
-    # Move tensors to the specified device
-    values.to(device)
+    values_tensor.to(device)
     abbreviations_one_hot_encoded.to(device)
     sources_one_hot_encoded.to(device)
+    return sources_one_hot_encoded, abbreviations_one_hot_encoded, values_tensor
 
-    return sources_one_hot_encoded, abbreviations_one_hot_encoded, values
+
+def load_data_lite(data, device, n_genes, standardize=True):
+    values = data.iloc[:, -n_genes:].values
+    values_tensor = torch.tensor(values).to(torch.float32)
+
+    if standardize:
+        # Standardize the data
+        scaler = StandardScaler()
+        standardized_values = scaler.fit_transform(values)
+        # Convert to PyTorch tensor
+        values_tensor = torch.tensor(standardized_values, dtype=torch.float32)
+
+    # Normalize the data
+    # min_max_scaler = MinMaxScaler()
+    # normalized_values = min_max_scaler.fit_transform(standardized_values)
+
+    return values_tensor.to(device)
 
 
 class CustomDataset(Dataset):
-    def __init__(self, dataframe: pd.DataFrame, device: torch.device):
+    def __init__(self, dataframe: pd.DataFrame, n_genes: int, device: torch.device):
         """
         Initialize the CustomDataset.
 
@@ -468,11 +482,12 @@ class CustomDataset(Dataset):
         """
         self.data = dataframe
         self.device = device
+        self.n_genes = n_genes
         (
             self.sources_one_hot_encoded,
             self.abbreviations_one_hot_encoded,
             self.values,
-        ) = load_data(self.data, self.device)
+        ) = load_data(self.data, self.device, self.n_genes)
 
     def __len__(self) -> int:
         """
@@ -533,59 +548,41 @@ def access_data(
     tcga_final = access_tcga_data_with_abbreviation(
         tcga_data_intersection, tcga_metadata_file_path
     )
-    return ccle_final, tcga_final
+    n_genes = len(ccle_data_intersection.columns)
+    return ccle_final, tcga_final, n_genes
 
 
 class StratifiedSampler(Sampler):
-    def __init__(self, dataset: Dataset, indices: List[int]):
-        """
-        Stratified sampling implementation for creating a balanced sampler.
-
-        Parameters:
-        - dataset (Dataset): The dataset to be sampled from.
-        - indices (List[int]): The indices to be sampled from.
-
-        Note:
-        The dataset is expected to return a tuple (label, _, _) from its __getitem__ method,
-        where label is the class label of the sample.
-        """
+    def __init__(self, dataset, indices):
         self.dataset = dataset
         self.indices = indices
         self.num_samples = len(indices)
 
-        # Count the frequency of eccle class in the specified indices
+        # Count the frequency of each class in the specified indices
         label_to_count = {}
         for index in self.indices:
-            label, _, _ = self.dataset[index]
+            (
+                _,
+                _,
+                label,
+            ) = self.dataset[index]
             label = str(label.tolist())
             if label in label_to_count:
                 label_to_count[label] += 1
             else:
                 label_to_count[label] = 1
-        # Weight for eccle sample
+        # Weight for each sample
         weights = [
-            1.0 / label_to_count[str(self.dataset[index][0].tolist())]
+            1.0 / label_to_count[str(self.dataset[index][2].tolist())]
             for index in self.indices
         ]
         self.weights = torch.DoubleTensor(weights)
 
-    def __iter__(self) -> Iterator[int]:
-        """
-        Returns an iterator over the indices.
-
-        Returns:
-        - Iterator[int]: An iterator over the indices.
-        """
+    def __iter__(self):
         return (
             self.indices[i]
             for i in torch.multinomial(self.weights, self.num_samples, replacement=True)
         )
 
-    def __len__(self) -> int:
-        """
-        Returns the number of samples in the sampler.
-
-        Returns:
-        - int: The number of samples in the sampler.
-        """
+    def __len__(self):
         return self.num_samples
