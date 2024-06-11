@@ -386,3 +386,4 @@ class BatchVAE(nn.Module):
         
         return dec, enc, means, stdev
 '''
+
