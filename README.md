@@ -25,15 +25,20 @@ To use MOBER for projecting transcriptomics profiles from one origin to another:
 3. Change the one-hot vector informing on the sample origin to the desired one.
 4. Decode the transcriptomics profile as if it were from the desired origin.
 
+## Example Usage
+There is a Jupyter notebook called example_usage.ipynb which presents the typical workflow and usage of the code.
+
 ## Data Files
 
 Download the necessary data files using the following links:
 
-- [ACH Data](link-to-ach-data)
-- [TCGA Data](link-to-tcga-data)
-- [TCGA Projects](link-to-tcga-projects)
-- [ACH Metadata](link-to-ach-metadata)
-- [TCGA Metadata](link-to-tcga-metadata)
+- [ACH Data](https://depmap.org/portal/)
+- [TCGA Data](https://xena.treehouse.gi.ucsc.edu/download/TumorCompendium_v11_PolyA_hugo_log2tpm_58581genes_2020-04-09.tsv)
+- [TCGA Projects](https://drive.google.com/file/d/186omJbPmclVJ2gNSVlwBPU3LI540HpwS/view?usp=sharing)
+- [ACH Metadata](https://depmap.org/portal/)
+- [TCGA Metadata](https://xena.treehouse.gi.ucsc.edu/download/TumorCompendium_v11_PolyA_hugo_log2tpm_58581genes_2020-04-09.tsv.json)
+- [L1000 genes list](https://drive.google.com/file/d/19xhBJ49XonbkpwTDtOmJw7NyJWwJnZ8P/view?usp=sharing)
+- [ACH GDSC Indexes](https://drive.google.com/file/d/13aNLsZ9Ff5z1r8_T1TxBi5ZYSHiquQHq/view?usp=sharing)
 
 ## Requirements
 
