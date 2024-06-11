@@ -2,6 +2,8 @@ import torch
 import numpy as np
 from torch.utils.data import DataLoader
 import faiss
+import numpy as np
+from sklearn.neighbors import NearestNeighbors
 
 
 def project_into_decoded_space(
@@ -88,7 +90,7 @@ def project_into_decoded_space(
         tcga_decoded_data,
         tcga_true_abbreviations,
     )
-
+'''
 
 def metrics_on_dataloader(
     true_space_labels: np.ndarray,
@@ -137,3 +139,68 @@ def metrics_on_dataloader(
     count = np.sum(np.all((true_labels) == (new_array), axis=1)).item()
 
     return count / len(true_labels)
+
+'''
+
+def metrics_on_dataloader(true_space_labels, true_space_features, true_labels, model_predicted_features, k=25):
+    # Normalize true space features
+    true_space_features_normalized = true_space_features / np.linalg.norm(true_space_features, axis=1)[:, np.newaxis]
+    
+    # Fit a nearest neighbors model
+    nbrs = NearestNeighbors(n_neighbors=k, algorithm='auto').fit(true_space_features_normalized)
+    
+    # Find the k-nearest neighbors
+    distances, indices = nbrs.kneighbors(model_predicted_features)
+    
+    
+    # Fit a nearest neighbors model
+    nbrs = NearestNeighbors(n_neighbors=k, algorithm='auto').fit(true_space_features)
+    
+    # Find the k-nearest neighbors
+    distances_1, indices_1 = nbrs.kneighbors(model_predicted_features)
+
+
+
+    # Get the labels of the nearest neighbors
+    nearest_neighbors_labels = true_space_labels[indices]
+
+    # Calculate the average class of the nearest neighbors for each element
+    average_class = np.sum(nearest_neighbors_labels, axis=1)
+
+    # Find the index of the maximum value
+    max_indices = np.argmax(average_class, axis=1)
+
+    # Create a new array with zeros
+    new_array = np.zeros_like(average_class)
+
+    # Set the value at the max_index to 1 for each element
+    new_array[np.arange(len(max_indices)), max_indices] = 1
+
+    # Convert one-hot representation to abbreviation
+    # predicted_abbreviations = one_hot_to_abbreviation(torch.tensor(new_array), index_to_abbreviation)
+
+    # Count correct predictions
+    count = np.sum(np.all((true_labels) == (new_array), axis=1)).item()
+
+    # Get the labels of the nearest neighbors
+    nearest_neighbors_labels_1 = true_space_labels[indices_1]
+
+    # Calculate the average class of the nearest neighbors for each element
+    average_class_1 = np.sum(nearest_neighbors_labels_1, axis=1)
+
+    # Find the index of the maximum value
+    max_indices_1 = np.argmax(average_class_1, axis=1)
+
+    # Create a new array with zeros
+    new_array_1 = np.zeros_like(average_class_1)
+
+    # Set the value at the max_index to 1 for each element
+    new_array_1[np.arange(len(max_indices)), max_indices_1] = 1
+
+    # Convert one-hot representation to abbreviation
+    # predicted_abbreviations = one_hot_to_abbreviation(torch.tensor(new_array), index_to_abbreviation)
+
+    # Count correct predictions
+    count_1 = np.sum(np.all((true_labels) == (new_array_1), axis=1)).item()
+
+    return count / len(true_labels), count_1 / len(true_labels)
